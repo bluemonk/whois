@@ -14,7 +14,7 @@
 #++
 
 
-require 'ipaddr'
+require 'ipaddress'
 
 
 module Whois
@@ -122,15 +122,9 @@ module Whois
     #   When unable to find an appropriate whois server for <tt>qstring</tt>.
     #
     def self.guess(qstring)
-      # IPv6 address (secure match)
-      if valid_ipv6?(qstring)
-        return find_for_ipv6(qstring)
-      end
 
-      # IPv4 address (secure match)
-      if valid_ipv4?(qstring)
-        return find_for_ipv4(qstring)
-      end
+      # IP address (secure match)
+      return find_for_ip(qstring) if IPAddress::valid?(qstring)
 
       # Email Address (secure match)
       if qstring =~ /@/
@@ -148,29 +142,19 @@ module Whois
 
 
     private
-
-      def self.find_for_ipv6(qstring)
-        ip = IPAddr.new(qstring)
-        definitions(:ipv6).each do |definition|
-          if IPAddr.new(definition.first).include?(ip)
-            return factory(:ipv6, *definition)
+    
+      def self.find_for_ip(qstring)
+        ip = IPAddress::parse(qstring)
+        klass = ip.class == IPAddress::IPv4 ? :ipv4 : :ipv6
+        definitions(klass).each do |definition|
+          if ip.class.new(definition.first).include?(ip)
+            return factory(klass, *definition)
           end
         end
         raise AllocationUnknown,
                 "IP Allocation for `#{qstring}' unknown. Server definitions might be outdated."
       end
-
-      def self.find_for_ipv4(qstring)
-        ip = IPAddr.new(qstring)
-        definitions(:ipv4).each do |definition|
-          if IPAddr.new(definition.first).include?(ip)
-            return factory(:ipv4, *definition)
-          end
-        end
-        raise AllocationUnknown,
-                "IP Allocation for `#{qstring}' unknown. Server definitions might be outdated."
-      end
-
+    
       def self.find_for_email(qstring)
         raise ServerNotSupported, "No whois server is known for email objects"
       end
@@ -180,25 +164,6 @@ module Whois
           return factory(:tld, *definition) if /#{Regexp.escape(definition.first)}$/ =~ qstring
         end
         nil
-      end
-
-      def self.valid_ipv4?(addr)
-        if /\A(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\Z/ =~ addr
-          return $~.captures.all? {|i| i.to_i < 256}
-        end
-        false
-      end
-
-      def self.valid_ipv6?(addr)
-        # IPv6 (normal)
-        return true if /\A[\dA-Fa-f]{1,4}(:[\dA-Fa-f]{1,4})*\Z/ =~ addr
-        return true if /\A[\dA-Fa-f]{1,4}(:[\dA-Fa-f]{1,4})*::([\dA-Fa-f]{1,4}(:[\dA-Fa-f]{1,4})*)?\Z/ =~ addr
-        return true if /\A::([\dA-Fa-f]{1,4}(:[\dA-Fa-f]{1,4})*)?\Z/ =~ addr
-        # IPv6 (IPv4 compat)
-        return true if /\A[\dA-Fa-f]{1,4}(:[\dA-Fa-f]{1,4})*:/ =~ addr && valid_ipv4?($')
-        return true if /\A[\dA-Fa-f]{1,4}(:[\dA-Fa-f]{1,4})*::([\dA-Fa-f]{1,4}(:[\dA-Fa-f]{1,4})*:)?/ =~ addr && valid_ipv4?($')
-        return true if /\A::([\dA-Fa-f]{1,4}(:[\dA-Fa-f]{1,4})*:)?/ =~ addr && valid_ipv4?($')
-        false
       end
 
   end
